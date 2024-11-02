@@ -1,18 +1,5 @@
-add_executable(barcode
-        barcode.c
-        )
+set(WIFI_SSID "${WIFI_SSID}" CACHE INTERNAL "WiFi SSID for examples")
+set(WIFI_PASSWORD "${WIFI_PASSWORD}" CACHE INTERNAL "WiFi password for examples")
 
-target_link_libraries(barcode
-        pico_stdlib              # for core functionality
-        pico_cyw43_arch_none     # we need Wifi to access the GPIO, but we don't need anything else
-        hardware_adc
-        hardware_gpio
-        )
-
-pico_enable_stdio_usb(barcode 1)
-
-# create map/bin/hex file etc.
-pico_add_extra_outputs(barcode)
-
-# add url via pico_set_program_url
-example_auto_set_url(barcode)
+add_subdirectory(line_tracking)
+add_subdirectory(barcode)
