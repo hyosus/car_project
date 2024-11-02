@@ -11,14 +11,13 @@
 #define ADC_PIN 26 // GPIO 26 (ADC0)
 #define DIGI_PIN 27
 // Thresholds and Timing
-#define THRESHOLD 1000        // ADC midpoint (0-4095 for 12-bit ADC)
-#define MAX_ELEMENTS 30       // Each character in the barcode has 9 elements (5 bars and 4 spaces), 9 + 1 for extra space element after each character
-#define MAX_BARCODE_LENGTH 90 // Maximum barcode length (10 characters)
-#define DEBOUNCE_TIME_US 500  // Debounce time in us
-#define SAMPLE_SIZE 500
-#define ACTIVE_DURATION 35 // Number of consecutive active readings to consider as end of barcode
+#define THRESHOLD 1000  // ADC midpoint (0-4095 for 12-bit ADC)
+#define MAX_ELEMENTS 30 // Each character in the barcode has 9 elements (5 bars and 4 spaces), 9 + 1 for extra space element after each character
+#define SAMPLE_SIZE 800
+#define ACTIVE_DURATION 40 // Number of consecutive active readings to consider as end of barcode
 
 bool scanning_completed = false;
+int reverse_count = 0;
 
 // Element Structure. Each scanned element is classified as either a bar or a space.
 typedef struct
@@ -179,29 +178,12 @@ void reverse_array(Element *original, int total_elements)
     }
 }
 
-void collect_data()
-{
-    int consecutive_active_count = 0;
-
-    for (int i = 0; i < SAMPLE_SIZE; i++)
-    {
-        adc_select_input(0);
-        bool current_state = gpio_get(DIGI_PIN);
-
-        uint16_t sensor_value = adc_read();
-        ADC_values[i] = sensor_value;
-        printf("Sensor value: %d\n", sensor_value);
-
-        sleep_ms(100);
-    }
-}
-
-void find_threshold()
+void find_threshold(int valid_samples)
 {
     uint16_t max = 0;
     uint16_t min = 4095;
 
-    for (int i = 0; i < SAMPLE_SIZE; i++)
+    for (int i = 0; i < valid_samples; i++)
     {
         if (ADC_values[i] > max)
         {
@@ -213,8 +195,44 @@ void find_threshold()
         }
     }
 
-    HIGH_THRESHOLD = max * 0.48; // 78% of max value
-    LOW_THRESHOLD = min * 3;     // 120% of min value
+    HIGH_THRESHOLD = max * 0.48; // 48% of max value
+    LOW_THRESHOLD = min * 3;     // 300% of min value
+    printf("Max: %d, Min: %d, HIGH_THRESHOLD: %d, LOW_THRESHOLD: %d\n", max, min, HIGH_THRESHOLD, LOW_THRESHOLD);
+}
+
+void collect_data()
+{
+    int consecutive_active_count = 0;
+    int sample_count = 0; // Track actual collected samples
+
+    for (int i = 0; i < SAMPLE_SIZE; i++)
+    {
+        adc_select_input(0);
+        bool current_state = gpio_get(DIGI_PIN);
+
+        uint16_t sensor_value = adc_read();
+        ADC_values[i] = sensor_value;
+        sample_count++; // Increment collected samples
+        printf("Sensor value: %d\n", sensor_value);
+
+        if (!current_state)
+        {
+            consecutive_active_count++;
+            if (consecutive_active_count >= ACTIVE_DURATION)
+            {
+                printf("End of barcode. Breaking the loop.\n");
+                break;
+            }
+        }
+        else
+        {
+            consecutive_active_count = 0;
+        }
+
+        sleep_ms(80);
+    }
+
+    find_threshold(sample_count); // Pass actual sample count to find_threshold
 }
 
 void find_width()
@@ -354,9 +372,10 @@ void decode_elements(Element *elements, int total_elements)
         }
     }
 
-    // If first decoded char is not "*", reverse the array and decode again
-    if (decoded_chars[0] != '*')
+    // If first decoded char is not "*", reverse the array and decode again. Make sure to reverse only once.
+    if (decoded_chars[0] != '*' && reverse_count == 0)
     {
+        reverse_count++;
         reverse_array(elements, total_elements);
         decode_elements(reversed_elements, total_elements);
     }
@@ -390,9 +409,6 @@ int main()
 
         if (scanning_complete)
         {
-            find_threshold();
-            printf("High threshold: %d, Low threshold: %d\n", HIGH_THRESHOLD, LOW_THRESHOLD);
-
             find_width();
 
             decode_elements(elements, element_count);
@@ -402,15 +418,20 @@ int main()
             {
                 printf("Element %d: %d | %d width\n", i + 1, elements[i].is_wide, elements[i].width);
             }
-            printf("==== Reversed Array ====\n");
-            for (int i = 0; i < element_count; i++)
+
+            if (reverse_count > 0)
             {
-                printf("Element %d: %d | %d width\n", i + 1, reversed_elements[i].is_wide, reversed_elements[i].width);
+                printf("==== Reversed Array ====\n");
+                for (int i = 0; i < element_count; i++)
+                {
+                    printf("Element %d: %d | %d width\n", i + 1, reversed_elements[i].is_wide, reversed_elements[i].width);
+                }
             }
 
             scanning_complete = false; // Reset after completing processing
             scanning_started = false;  // Prepare for a new scan
             element_count = 0;         // Reset element count
+            reverse_count = 0;         // Reset reverse count
             sleep_ms(5000);            // Delay before checking for the next barcode
         }
 
