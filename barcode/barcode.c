@@ -11,8 +11,8 @@
 #define ADC_PIN 26 // GPIO 26 (ADC0)
 #define DIGI_PIN 27
 #define MAX_ELEMENTS 30 // Each character in the barcode has 9 elements (5 bars and 4 spaces), 9 + 1 for extra space element after each character
-#define SAMPLE_SIZE 800
-#define ACTIVE_DURATION 40 // Number of consecutive active readings to consider as end of barcode
+#define SAMPLE_SIZE 1500
+#define ACTIVE_DURATION 50 // Number of consecutive active readings to consider as end of barcode
 
 bool scanning_completed = false;
 int reverse_count = 0;
@@ -193,8 +193,8 @@ void find_threshold(int valid_samples)
         }
     }
 
-    HIGH_THRESHOLD = max * 0.48; // 48% of max value
-    LOW_THRESHOLD = min * 3;     // 300% of min value
+    HIGH_THRESHOLD = max * 0.7; // 48% of max value
+    LOW_THRESHOLD = min * 1.5;  // 300% of min value
     printf("Max: %d, Min: %d, HIGH_THRESHOLD: %d, LOW_THRESHOLD: %d\n", max, min, HIGH_THRESHOLD, LOW_THRESHOLD);
 }
 
@@ -227,7 +227,7 @@ void collect_data()
             consecutive_active_count = 0;
         }
 
-        sleep_ms(80);
+        // sleep_ms(20);
     }
 
     find_threshold(sample_count); // Pass actual sample count to find_threshold

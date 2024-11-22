@@ -4,10 +4,50 @@
 #include "pico/multicore.h"
 
 #define RIGHT_SENSOR_PIN 1 // digital pin (RIGHT)()
-#define LEFT_SENSOR_PIN 0  // digital pin (LEFT)
+#define LINE_SENSOR_PIN 0  // digital pin (LEFT)
 #define ADC_RIGHT 27       // analog pin (RIGHT)
 #define ADC_LEFT 26        // analog pin (LEFT)
 #define THRESHOLD 1500     // threshold for surface contrast detection
+
+#define LEFT_MOTOR_PIN 3
+#define RIGHT_MOTOR_PIN 4
+
+void setup()
+{
+    stdio_init_all();
+    gpio_init(LINE_SENSOR_PIN);
+    gpio_set_dir(LINE_SENSOR_PIN, GPIO_IN);
+
+    gpio_init(LEFT_MOTOR_PIN);
+    gpio_set_dir(LEFT_MOTOR_PIN, GPIO_OUT);
+
+    gpio_init(RIGHT_MOTOR_PIN);
+    gpio_set_dir(RIGHT_MOTOR_PIN, GPIO_OUT);
+}
+
+void move_forward()
+{
+    gpio_put(LEFT_MOTOR_PIN, 1);
+    gpio_put(RIGHT_MOTOR_PIN, 1);
+}
+
+void turn_left()
+{
+    gpio_put(LEFT_MOTOR_PIN, 0);
+    gpio_put(RIGHT_MOTOR_PIN, 1);
+}
+
+void turn_right()
+{
+    gpio_put(LEFT_MOTOR_PIN, 1);
+    gpio_put(RIGHT_MOTOR_PIN, 0);
+}
+
+void stop()
+{
+    gpio_put(LEFT_MOTOR_PIN, 0);
+    gpio_put(RIGHT_MOTOR_PIN, 0);
+}
 
 // Function to measure pulse widths for both active and inactive states
 void measure_pulse_width(uint gpio_pin)
@@ -59,54 +99,90 @@ void measure_pulse_width(uint gpio_pin)
     }
 }
 
-void line_detection(void)
-{
-    uint16_t left_sensor, right_sensor;
+// void line_detection(void)
+// {
+//     uint16_t left_sensor, right_sensor;
 
+//     while (1)
+//     {
+//         // Read left sensor
+//         adc_select_input(0);
+//         left_sensor = adc_read();
+
+//         // Read right sensor
+//         adc_select_input(1);
+//         right_sensor = adc_read();
+
+//         printf("Left sensor: %d,  Right sensor: %d\n", left_sensor, right_sensor);
+
+//         // Detect surface contrast (simple threshold logic)
+//         if (left_sensor > THRESHOLD && right_sensor > THRESHOLD)
+//         {
+//             printf("Both sensors on DARK\n");
+//         }
+//         else if (left_sensor < THRESHOLD && right_sensor < THRESHOLD)
+//         {
+//             printf("Both sensor on WHITE\n");
+//         }
+//         else if (left_sensor < THRESHOLD && right_sensor > THRESHOLD)
+//         {
+//             printf("Left sensor on WHITE, Right sensor on DARK\n");
+//         }
+//         else if (left_sensor > THRESHOLD && right_sensor < THRESHOLD)
+//         {
+//             printf("Left sensors on DARK, Right sensor ON WHITE\n");
+//         }
+//         else
+//         {
+//             printf("???\n");
+//         }
+
+//         sleep_ms(1000);
+//     }
+// }
+
+void line_detection()
+{
     while (1)
     {
-        // Read left sensor
-        adc_select_input(0);
-        left_sensor = adc_read();
 
-        // Read right sensor
-        adc_select_input(1);
-        right_sensor = adc_read();
+        bool on_line = gpio_get(LINE_SENSOR_PIN);
 
-        printf("Left sensor: %d,  Right sensor: %d\n", left_sensor, right_sensor);
+        if (on_line)
+        {
+            printf("On line\n");
+            move_forward();
+            sleep_ms(1000);
 
-        // Detect surface contrast (simple threshold logic)
-        if (left_sensor > THRESHOLD && right_sensor > THRESHOLD)
-        {
-            printf("Both sensors on DARK\n");
-        }
-        else if (left_sensor < THRESHOLD && right_sensor < THRESHOLD)
-        {
-            printf("Both sensor on WHITE\n");
-        }
-        else if (left_sensor < THRESHOLD && right_sensor > THRESHOLD)
-        {
-            printf("Left sensor on WHITE, Right sensor on DARK\n");
-        }
-        else if (left_sensor > THRESHOLD && right_sensor < THRESHOLD)
-        {
-            printf("Left sensors on DARK, Right sensor ON WHITE\n");
+            // Move left to check if there is a left turn
+            move_left();
+
+            if (gpio_get(LINE_SENSOR_PIN))
+            {
+                printf("Left turn detected\n");
+                turn_left();
+                sleep_ms(1000);
+            }
+            else
+            {
+                printf("No left turn detected\n");
+                move_forward();
+                sleep_ms(1000);
+            }
         }
         else
         {
-            printf("???\n");
+            printf("Off line\n");
         }
-
-        sleep_ms(1000);
     }
 }
 
 // Function to be run on core 1
-void core1_entry()
-{
-    // measure_pulse_width(RIGHT_SENSOR_PIN);
-    measure_pulse_width(LEFT_SENSOR_PIN);
-}
+// void core1_entry()
+// {
+//     // measure_pulse_width(RIGHT_SENSOR_PIN);
+//     measure_pulse_width(LEFT_SENSOR_PIN);
+// }
 
 int main()
 {
@@ -117,18 +193,9 @@ int main()
     adc_gpio_init(ADC_LEFT);
 
     // Initialize digital pins for pulse width measurement
-    gpio_init(LEFT_SENSOR_PIN);
-    gpio_set_dir(LEFT_SENSOR_PIN, GPIO_IN);
-    gpio_pull_up(LEFT_SENSOR_PIN); // D0 is active LOW
-
-    gpio_init(RIGHT_SENSOR_PIN);
-    gpio_set_dir(RIGHT_SENSOR_PIN, GPIO_IN);
-    gpio_pull_up(RIGHT_SENSOR_PIN); // D0 is active LOW
-
-    // Measure pulse width of digital signals
-    // Launch measure_pulse_width on core 1
-    // multicore_launch_core1(core1_entry);
-    // measure_pulse_width(LEFT_SENSOR_PIN);
+    gpio_init(LINE_SENSOR_PIN);
+    gpio_set_dir(LINE_SENSOR_PIN, GPIO_IN);
+    gpio_pull_up(LINE_SENSOR_PIN); // D0 is active LOW
 
     // Detect line using analog sensors
     line_detection();
