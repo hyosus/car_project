@@ -10,8 +10,6 @@
 // GPIO Definitions
 #define ADC_PIN 26 // GPIO 26 (ADC0)
 #define DIGI_PIN 27
-// Thresholds and Timing
-#define THRESHOLD 1000  // ADC midpoint (0-4095 for 12-bit ADC)
 #define MAX_ELEMENTS 30 // Each character in the barcode has 9 elements (5 bars and 4 spaces), 9 + 1 for extra space element after each character
 #define SAMPLE_SIZE 800
 #define ACTIVE_DURATION 40 // Number of consecutive active readings to consider as end of barcode
@@ -432,42 +430,8 @@ int main()
             scanning_started = false;  // Prepare for a new scan
             element_count = 0;         // Reset element count
             reverse_count = 0;         // Reset reverse count
-            sleep_ms(5000);            // Delay before checking for the next barcode
+            sleep_ms(1000);            // Delay before checking for the next barcode
         }
-
-        // if (!scanning_started && sensor_value > THRESHOLD)
-        // {
-        //     scanning_started = true;
-        //     printf("Barcode scanning started!\n");
-        //     scanning_completed = false;
-        //     element_count = 0;
-        // }
-        // if (scanning_started)
-        // {
-        //     // Measure pulse widths
-        //     measure_pulse_width_adc(ADC_PIN);
-        //     scanning_completed = true;
-        //     // Wait until scanning is completed
-        //     while (!scanning_completed)
-        //     {
-        //         tight_loop_contents();
-        //     }
-        //     printf("Scanning completed.");
-        //     // Classify elements
-        //     classify_elements(elements, element_count);
-        //     // Decode character
-        //     char decoded_char = decode_character(elements);
-        //     printf("Decoded character: %c\n", decoded_char);
-        //     // Reset for next character
-        //     element_count = 0;
-        //     scanning_completed = false;
-        //     // Check if we've reached the end of the barcode
-        //     if (decoded_char == '*')
-        //     { //'*' marks the end of the barcode
-        //         printf("Barcode scan completed.\n");
-        //         scanning_started = false;
-        //     }
-        // }
     }
     return 0;
 }
