@@ -1,5 +1,6 @@
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
@@ -10,7 +11,7 @@
 // GPIO Definitions
 #define ADC_PIN 26 // GPIO 26 (ADC0)
 #define DIGI_PIN 27
-#define MAX_ELEMENTS 30 // Each character in the barcode has 9 elements (5 bars and 4 spaces), 9 + 1 for extra space element after each character
+#define MAX_ELEMENTS 29 // Each character in the barcode has 9 elements (5 bars and 4 spaces), 9 + 1 for extra space element after each character
 #define SAMPLE_SIZE 1500
 #define ACTIVE_DURATION 50 // Number of consecutive active readings to consider as end of barcode
 
@@ -29,9 +30,9 @@ Element elements[MAX_ELEMENTS];
 Element reversed_elements[MAX_ELEMENTS];
 int element_count = 0;
 
-uint16_t ADC_values[SAMPLE_SIZE];
+// uint16_t ADC_values[SAMPLE_SIZE];
 uint16_t DIGI_values[SAMPLE_SIZE];
-uint16_t HIGH_THRESHOLD, LOW_THRESHOLD;
+// uint16_t HIGH_THRESHOLD, LOW_THRESHOLD;
 
 // Code 39 Patterns and Characters
 typedef struct
@@ -155,6 +156,140 @@ void init_adc_sensor()
 //     }
 // }
 
+// void find_threshold(int valid_samples)
+// {
+//     uint16_t max = 0;
+//     uint16_t min = 4095;
+
+//     for (int i = 0; i < valid_samples; i++)
+//     {
+//         if (ADC_values[i] > max)
+//         {
+//             max = ADC_values[i];
+//         }
+//         if (ADC_values[i] < min)
+//         {
+//             min = ADC_values[i];
+//         }
+//     }
+
+//     HIGH_THRESHOLD = max * 0.7; // 48% of max value
+//     LOW_THRESHOLD = min * 1.5;  // 300% of min value
+//     printf("Max: %d, Min: %d, HIGH_THRESHOLD: %d, LOW_THRESHOLD: %d\n", max, min, HIGH_THRESHOLD, LOW_THRESHOLD);
+// }
+
+// void collect_data()
+// {
+//     int consecutive_active_count = 0;
+//     int sample_count = 0; // Track actual collected samples
+
+//     for (int i = 0; i < SAMPLE_SIZE; i++)
+//     {
+//         adc_select_input(0);
+//         bool current_state = gpio_get(DIGI_PIN);
+
+//         uint16_t sensor_value = adc_read();
+//         ADC_values[i] = sensor_value;
+//         sample_count++; // Increment collected samples
+//         printf("Sensor value: %d\n", sensor_value);
+
+//         if (!current_state)
+//         {
+//             consecutive_active_count++;
+//             if (consecutive_active_count >= ACTIVE_DURATION)
+//             {
+//                 printf("End of barcode. Breaking the loop.\n");
+//                 break;
+//             }
+//         }
+//         else
+//         {
+//             consecutive_active_count = 0;
+//         }
+
+//         // sleep_ms(20);
+//     }
+
+//     find_threshold(sample_count); // Pass actual sample count to find_threshold
+// }
+
+// void find_width()
+// {
+//     int high_count = 0;  // To count width of high pulse
+//     int low_count = 0;   // To count width of low pulse
+//     bool is_high = true; // To alternate between high and low pulses
+
+//     for (int i = 0; i < SAMPLE_SIZE; i++)
+//     {
+//         if (ADC_values[i] >= HIGH_THRESHOLD && is_high) // Start of a high pulse
+//         {
+//             high_count = 1; // Initialize high pulse count
+
+//             // Loop to keep counting as long as ADC values remain above threshold
+//             for (int j = i + 1; j < SAMPLE_SIZE; j++)
+//             {
+//                 if (ADC_values[j] < HIGH_THRESHOLD) // High pulse ends
+//                 {
+//                     elements[element_count++].width = high_count; // Store high pulse width
+//                     i = j - 1;                                    // Continue from this position in outer loop
+//                     is_high = false;                              // Switch to expect a low pulse next
+//                     high_count = 0;                               // Reset high pulse counter
+//                     break;
+//                 }
+//                 high_count++; // Increment high pulse width count
+//             }
+//         }
+//         else if (ADC_values[i] <= LOW_THRESHOLD && !is_high) // Start of a low pulse
+//         {
+//             low_count = 1; // Initialize low pulse count
+
+//             // Loop to keep counting as long as ADC values remain below threshold
+//             for (int j = i + 1; j < SAMPLE_SIZE; j++)
+//             {
+//                 if (ADC_values[j] > LOW_THRESHOLD) // Low pulse ends
+//                 {
+//                     elements[element_count++].width = low_count; // Store low pulse width
+//                     i = j - 1;                                   // Continue from this position in outer loop
+//                     is_high = true;                              // Switch to expect a high pulse next
+//                     low_count = 0;                               // Reset low pulse counter
+//                     break;
+//                 }
+//                 low_count++; // Increment low pulse width count
+//             }
+//         }
+//     }
+
+//     printf("Find width completed\n");
+// }
+
+// Function to classify elements as narrow or wide
+// void classify_elements(Element *elements, int count)
+// {
+//     // Find the shortest
+//     float min_duration = elements[0].width;
+//     for (int i = 1; i < count; i++)
+//     {
+//         if (elements[i].width < min_duration)
+//         {
+//             min_duration = elements[i].width; // shortest duration
+//         }
+//     }
+//     // Classify elements based on the shortest duration
+//     for (int i = 0; i < count; i++)
+//     {
+//         if (elements[i].width > min_duration * 3) // wide element is 3 to 3.5 times longer than the narrow element
+//         {
+//             elements[i].is_wide = 1; // Wide element
+//         }
+//         else
+//         {
+//             elements[i].is_wide = 0; // Narrow element
+//         }
+//     }
+
+//     printf("Classification complete\n");
+// }
+
 // Function to calculate the Hamming distance between two patterns
 int hamming_distance(const int *pattern1, const int *pattern2, int length)
 {
@@ -177,26 +312,73 @@ void reverse_array(Element *original, int total_elements)
     }
 }
 
-void find_threshold(int valid_samples)
+// Function to decode a single character from a group of 9 elements
+char decode_character(Element *elements_group)
 {
-    uint16_t max = 0;
-    uint16_t min = 4095;
-
-    for (int i = 0; i < valid_samples; i++)
+    // Create a temporary pattern array for the 9-element sequence
+    int temp_pattern[10];
+    for (int i = 0; i < 9; i++)
     {
-        if (ADC_values[i] > max)
+        temp_pattern[i] = elements_group[i].is_wide ? 1 : 0;
+    }
+
+    int min_distance = INT_MAX;
+    char closest_char = '?';
+
+    // Compare with each mapping in code39_mappings
+    // Find the closest matching character based on Hamming distance
+    for (int i = 0; i < num_mappings; i++)
+    {
+        int distance = hamming_distance(temp_pattern, code39_mappings[i].pattern, 9);
+        if (distance < min_distance)
         {
-            max = ADC_values[i];
-        }
-        if (ADC_values[i] < min)
-        {
-            min = ADC_values[i];
+            min_distance = distance;
+            closest_char = code39_mappings[i].character;
         }
     }
 
-    HIGH_THRESHOLD = max * 0.7; // 48% of max value
-    LOW_THRESHOLD = min * 1.5;  // 300% of min value
-    printf("Max: %d, Min: %d, HIGH_THRESHOLD: %d, LOW_THRESHOLD: %d\n", max, min, HIGH_THRESHOLD, LOW_THRESHOLD);
+    return closest_char;
+}
+
+// grouping them in sets of 9 for decoding of each character.
+void decode_elements(Element *elements, int total_elements)
+{
+    // First, classify all elements as narrow or wide
+    classify_elements(elements, total_elements);
+
+    int element_index = 0;
+    int char_count = 0;
+    char decoded_chars[3];
+
+    // Loop through elements and decode each 9-element group
+    while (element_index + 9 <= total_elements) // Ensure enough elements remain
+    {
+        // Collect 9 elements for the current character
+        Element elements_group[9];
+        for (int i = 0; i < 9; i++)
+        {
+            elements_group[i] = elements[element_index++];
+        }
+
+        // Decode the character using the elements_group and code39_mappings
+        decoded_chars[char_count] = decode_character(elements_group);
+        printf("Decoded Character %d: %c\n", char_count + 1, decoded_chars[char_count]);
+        char_count++;
+
+        // If a separator follows, skip it
+        if (element_index < total_elements && elements[element_index].is_wide == 0)
+        {
+            element_index++;
+        }
+    }
+
+    // If first decoded char is not "*", reverse the array and decode again. Make sure to reverse only once.
+    if (decoded_chars[0] != '*' && reverse_count == 0)
+    {
+        reverse_count++;
+        reverse_array(elements, total_elements);
+        decode_elements(reversed_elements, total_elements);
+    }
 }
 
 void find_width_digi()
@@ -285,187 +467,6 @@ void collect_data()
     }
 }
 
-// void collect_data()
-// {
-//     int consecutive_active_count = 0;
-//     int sample_count = 0; // Track actual collected samples
-
-//     for (int i = 0; i < SAMPLE_SIZE; i++)
-//     {
-//         adc_select_input(0);
-//         bool current_state = gpio_get(DIGI_PIN);
-
-//         uint16_t sensor_value = adc_read();
-//         ADC_values[i] = sensor_value;
-//         sample_count++; // Increment collected samples
-//         printf("Sensor value: %d\n", sensor_value);
-
-//         if (!current_state)
-//         {
-//             consecutive_active_count++;
-//             if (consecutive_active_count >= ACTIVE_DURATION)
-//             {
-//                 printf("End of barcode. Breaking the loop.\n");
-//                 break;
-//             }
-//         }
-//         else
-//         {
-//             consecutive_active_count = 0;
-//         }
-
-//         // sleep_ms(20);
-//     }
-
-//     find_threshold(sample_count); // Pass actual sample count to find_threshold
-// }
-
-void find_width()
-{
-    int high_count = 0;  // To count width of high pulse
-    int low_count = 0;   // To count width of low pulse
-    bool is_high = true; // To alternate between high and low pulses
-
-    for (int i = 0; i < SAMPLE_SIZE; i++)
-    {
-        if (ADC_values[i] >= HIGH_THRESHOLD && is_high) // Start of a high pulse
-        {
-            high_count = 1; // Initialize high pulse count
-
-            // Loop to keep counting as long as ADC values remain above threshold
-            for (int j = i + 1; j < SAMPLE_SIZE; j++)
-            {
-                if (ADC_values[j] < HIGH_THRESHOLD) // High pulse ends
-                {
-                    elements[element_count++].width = high_count; // Store high pulse width
-                    i = j - 1;                                    // Continue from this position in outer loop
-                    is_high = false;                              // Switch to expect a low pulse next
-                    high_count = 0;                               // Reset high pulse counter
-                    break;
-                }
-                high_count++; // Increment high pulse width count
-            }
-        }
-        else if (ADC_values[i] <= LOW_THRESHOLD && !is_high) // Start of a low pulse
-        {
-            low_count = 1; // Initialize low pulse count
-
-            // Loop to keep counting as long as ADC values remain below threshold
-            for (int j = i + 1; j < SAMPLE_SIZE; j++)
-            {
-                if (ADC_values[j] > LOW_THRESHOLD) // Low pulse ends
-                {
-                    elements[element_count++].width = low_count; // Store low pulse width
-                    i = j - 1;                                   // Continue from this position in outer loop
-                    is_high = true;                              // Switch to expect a high pulse next
-                    low_count = 0;                               // Reset low pulse counter
-                    break;
-                }
-                low_count++; // Increment low pulse width count
-            }
-        }
-    }
-
-    printf("Find width completed\n");
-}
-
-// Function to classify elements as narrow or wide
-void classify_elements(Element *elements, int count)
-{
-    // Find the shortest
-    float min_duration = elements[0].width;
-    for (int i = 1; i < count; i++)
-    {
-        if (elements[i].width < min_duration)
-        {
-            min_duration = elements[i].width; // shortest duration
-        }
-    }
-    // Classify elements based on the shortest duration
-    for (int i = 0; i < count; i++)
-    {
-        if (elements[i].width > min_duration * 3) // wide element is 3 to 3.5 times longer than the narrow element
-        {
-            elements[i].is_wide = 1; // Wide element
-        }
-        else
-        {
-            elements[i].is_wide = 0; // Narrow element
-        }
-    }
-
-    printf("Classification complete\n");
-}
-
-// Function to decode a single character from a group of 9 elements
-char decode_character(Element *elements_group)
-{
-    // Create a temporary pattern array for the 9-element sequence
-    int temp_pattern[10];
-    for (int i = 0; i < 9; i++)
-    {
-        temp_pattern[i] = elements_group[i].is_wide ? 1 : 0;
-    }
-
-    int min_distance = INT_MAX;
-    char closest_char = '?';
-
-    // Compare with each mapping in code39_mappings
-    // Find the closest matching character based on Hamming distance
-    for (int i = 0; i < num_mappings; i++)
-    {
-        int distance = hamming_distance(temp_pattern, code39_mappings[i].pattern, 9);
-        if (distance < min_distance)
-        {
-            min_distance = distance;
-            closest_char = code39_mappings[i].character;
-        }
-    }
-
-    return closest_char;
-}
-
-// grouping them in sets of 9 for decoding of each character.
-void decode_elements(Element *elements, int total_elements)
-{
-    // First, classify all elements as narrow or wide
-    classify_elements(elements, total_elements);
-
-    int element_index = 0;
-    int char_count = 0;
-    char decoded_chars[3];
-
-    // Loop through elements and decode each 9-element group
-    while (element_index + 9 <= total_elements) // Ensure enough elements remain
-    {
-        // Collect 9 elements for the current character
-        Element elements_group[9];
-        for (int i = 0; i < 9; i++)
-        {
-            elements_group[i] = elements[element_index++];
-        }
-
-        // Decode the character using the elements_group and code39_mappings
-        decoded_chars[char_count] = decode_character(elements_group);
-        printf("Decoded Character %d: %c\n", char_count + 1, decoded_chars[char_count]);
-        char_count++;
-
-        // If a separator follows, skip it
-        if (element_index < total_elements && elements[element_index].is_wide == 0)
-        {
-            element_index++;
-        }
-    }
-
-    // If first decoded char is not "*", reverse the array and decode again. Make sure to reverse only once.
-    if (decoded_chars[0] != '*' && reverse_count == 0)
-    {
-        reverse_count++;
-        reverse_array(elements, total_elements);
-        decode_elements(reversed_elements, total_elements);
-    }
-}
-
 int main()
 {
     // Initialize standard IO
@@ -489,31 +490,29 @@ int main()
         {
             scanning_started = true;
             collect_data();
-            printf("Data collection complete\n");
             scanning_complete = true;
         }
 
         if (scanning_complete)
         {
-            printf("finding width\n");
             find_width_digi();
 
             decode_elements(elements, element_count);
 
-            printf("==== Original Array ====\n");
-            for (int i = 0; i < element_count; i++)
-            {
-                printf("Element %d: %d | %d width\n", i + 1, elements[i].is_wide, elements[i].width);
-            }
+            // printf("==== Original Array ====\n");
+            // for (int i = 0; i < element_count; i++)
+            // {
+            //     printf("Element %d: %d | %d width\n", i + 1, elements[i].is_wide, elements[i].width);
+            // }
 
-            if (reverse_count > 0)
-            {
-                printf("==== Reversed Array ====\n");
-                for (int i = 0; i < element_count; i++)
-                {
-                    printf("Element %d: %d | %d width\n", i + 1, reversed_elements[i].is_wide, reversed_elements[i].width);
-                }
-            }
+            // if (reverse_count > 0)
+            // {
+            //     printf("==== Reversed Array ====\n");
+            //     for (int i = 0; i < element_count; i++)
+            //     {
+            //         printf("Element %d: %d | %d width\n", i + 1, reversed_elements[i].is_wide, reversed_elements[i].width);
+            //     }
+            // }
             scanning_complete = false; // Reset after completing processing
             scanning_started = false;  // Prepare for a new scan
             element_count = 0;         // Reset element count
