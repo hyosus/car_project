@@ -30,6 +30,7 @@ Element reversed_elements[MAX_ELEMENTS];
 int element_count = 0;
 
 uint16_t ADC_values[SAMPLE_SIZE];
+uint16_t DIGI_values[SAMPLE_SIZE];
 uint16_t HIGH_THRESHOLD, LOW_THRESHOLD;
 
 // Code 39 Patterns and Characters
@@ -198,27 +199,73 @@ void find_threshold(int valid_samples)
     printf("Max: %d, Min: %d, HIGH_THRESHOLD: %d, LOW_THRESHOLD: %d\n", max, min, HIGH_THRESHOLD, LOW_THRESHOLD);
 }
 
-void collect_data()
+void find_width_digi()
 {
-    int consecutive_active_count = 0;
-    int sample_count = 0; // Track actual collected samples
+    int high_count = 0; // To count width of high pulse
+    int low_count = 0;  // To count width of low pulse
+    bool is_high = 1;   // To alternate between high and low pulses
 
     for (int i = 0; i < SAMPLE_SIZE; i++)
     {
-        adc_select_input(0);
-        bool current_state = gpio_get(DIGI_PIN);
+        if (DIGI_values[i] && is_high) // Start of a high pulse
+        {
+            high_count = 1; // Initialize high pulse count
 
-        uint16_t sensor_value = adc_read();
-        ADC_values[i] = sensor_value;
-        sample_count++; // Increment collected samples
-        printf("Sensor value: %d\n", sensor_value);
+            // Loop to keep counting as long as ADC values remain above threshold
+            for (int j = i + 1; j < SAMPLE_SIZE; j++)
+            {
+                if (!DIGI_values[j]) // High pulse ends
+                {
+                    elements[element_count++].width = high_count; // Store high pulse width
+                    i = j - 1;                                    // Continue from this position in outer loop
+                    is_high = false;                              // Switch to expect a low pulse next
+                    high_count = 0;                               // Reset high pulse counter
+                    break;
+                }
+                high_count++; // Increment high pulse width count
+            }
+        }
+        else if (!DIGI_values[i] && !is_high) // Start of a low pulse
+        {
+            low_count = 1; // Initialize low pulse count
+
+            // Loop to keep counting as long as ADC values remain below threshold
+            for (int j = i + 1; j < SAMPLE_SIZE; j++)
+            {
+                if (DIGI_values[j]) // Low pulse ends
+                {
+                    elements[element_count++].width = low_count; // Store low pulse width
+                    i = j - 1;                                   // Continue from this position in outer loop
+                    is_high = true;                              // Switch to expect a high pulse next
+                    low_count = 0;                               // Reset low pulse counter
+                    break;
+                }
+                low_count++; // Increment low pulse width count
+            }
+        }
+    }
+
+    printf("Find width completed\n");
+}
+
+void collect_data()
+{
+    int consecutive_active_count = 0;
+    // int sample_count = 0; // Track actual collected samples
+    absolute_time_t timeout = make_timeout_time_ms(10000); // 5 second timeout
+
+    for (int i = 0; i < SAMPLE_SIZE; i++)
+    {
+        bool current_state = gpio_get(DIGI_PIN);
+        DIGI_values[i] = current_state;
+        printf("Digital value: %d\n", current_state);
 
         if (!current_state)
         {
             consecutive_active_count++;
             if (consecutive_active_count >= ACTIVE_DURATION)
             {
-                printf("End of barcode. Breaking the loop.\n");
+                printf("End of barcode.\n");
                 break;
             }
         }
@@ -227,11 +274,51 @@ void collect_data()
             consecutive_active_count = 0;
         }
 
-        // sleep_ms(20);
-    }
+        sleep_us(10); // small delay
 
-    find_threshold(sample_count); // Pass actual sample count to find_threshold
+        // Check for timeout
+        if (absolute_time_diff_us(get_absolute_time(), timeout) <= 0)
+        {
+            printf("Timeout reached in collect_digi()\n");
+            break;
+        }
+    }
 }
+
+// void collect_data()
+// {
+//     int consecutive_active_count = 0;
+//     int sample_count = 0; // Track actual collected samples
+
+//     for (int i = 0; i < SAMPLE_SIZE; i++)
+//     {
+//         adc_select_input(0);
+//         bool current_state = gpio_get(DIGI_PIN);
+
+//         uint16_t sensor_value = adc_read();
+//         ADC_values[i] = sensor_value;
+//         sample_count++; // Increment collected samples
+//         printf("Sensor value: %d\n", sensor_value);
+
+//         if (!current_state)
+//         {
+//             consecutive_active_count++;
+//             if (consecutive_active_count >= ACTIVE_DURATION)
+//             {
+//                 printf("End of barcode. Breaking the loop.\n");
+//                 break;
+//             }
+//         }
+//         else
+//         {
+//             consecutive_active_count = 0;
+//         }
+
+//         // sleep_ms(20);
+//     }
+
+//     find_threshold(sample_count); // Pass actual sample count to find_threshold
+// }
 
 void find_width()
 {
@@ -402,12 +489,14 @@ int main()
         {
             scanning_started = true;
             collect_data();
+            printf("Data collection complete\n");
             scanning_complete = true;
         }
 
         if (scanning_complete)
         {
-            find_width();
+            printf("finding width\n");
+            find_width_digi();
 
             decode_elements(elements, element_count);
 
@@ -425,7 +514,6 @@ int main()
                     printf("Element %d: %d | %d width\n", i + 1, reversed_elements[i].is_wide, reversed_elements[i].width);
                 }
             }
-
             scanning_complete = false; // Reset after completing processing
             scanning_started = false;  // Prepare for a new scan
             element_count = 0;         // Reset element count
